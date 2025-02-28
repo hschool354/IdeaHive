@@ -11,7 +11,17 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 // Mã reset cố định cho môi trường phát triển
 const DEV_RESET_TOKEN = 'dev-test-reset-token-123456';
 
-// API Xử lý đăng ký người dùng mới
+/**
+ * API xử lý đăng ký người dùng mới.
+ * @async
+ * @param {Object} req - Đối tượng request từ client.
+ * @param {Object} res - Đối tượng response để gửi phản hồi.
+ * @returns {Promise<void>} - Trả về phản hồi JSON cho client.
+ * @throws {Error} - Trả về lỗi nếu có vấn đề xảy ra trong quá trình đăng ký.
+ * @example
+ * POST /register
+ * Body: { "email": "user@example.com", "password": "123456", "fullName": "User Name" }
+ */
 exports.register = async (req, res) => {
   try {
     // Lấy thông tin người dùng từ request body
@@ -61,7 +71,17 @@ exports.register = async (req, res) => {
   }
 };
 
-// API xử lý đăng nhập người dùng
+/**
+ * API xử lý đăng nhập người dùng.
+ * @async
+ * @param {Object} req - Đối tượng request từ client.
+ * @param {Object} res - Đối tượng response để gửi phản hồi.
+ * @returns {Promise<void>} - Trả về phản hồi JSON chứa token và thông tin người dùng.
+ * @throws {Error} - Trả về lỗi nếu thông tin đăng nhập không hợp lệ hoặc có lỗi hệ thống.
+ * @example
+ * POST /login
+ * Body: { "email": "user@example.com", "password": "123456" }
+ */
 exports.login = async (req, res) => {
   try {
     // Nhận thông tin đăng nhập từ request body
@@ -126,7 +146,17 @@ exports.login = async (req, res) => {
   }
 };
 
-// API xử lý làm mới Access Token bằng Refresh Token
+/**
+ * API xử lý làm mới Access Token bằng Refresh Token.
+ * @async
+ * @param {Object} req - Đối tượng request từ client chứa refresh token.
+ * @param {Object} res - Đối tượng response để gửi phản hồi.
+ * @returns {Promise<void>} - Trả về JSON chứa access token mới nếu refresh token hợp lệ.
+ * @throws {Error} - Trả về lỗi nếu refresh token không hợp lệ, hết hạn hoặc xảy ra lỗi hệ thống.
+ * @example
+ * POST /refresh-token
+ * Body: { "refreshToken": "abcd1234-refresh-token" }
+ */
 exports.refreshToken = async (req, res) => {
   try {
     // Lấy refreshToken từ request body
@@ -182,7 +212,17 @@ exports.refreshToken = async (req, res) => {
   }
 };
 
-// API xử lý đăng xuất người dùng
+/**
+ * API xử lý đăng xuất người dùng bằng cách vô hiệu hóa refresh token.
+ * @async
+ * @param {Object} req - Đối tượng request từ client chứa refresh token.
+ * @param {Object} res - Đối tượng response để gửi phản hồi.
+ * @returns {Promise<void>} - Trả về thông báo thành công nếu đăng xuất thành công.
+ * @throws {Error} - Trả về lỗi nếu không cung cấp refresh token hoặc xảy ra lỗi hệ thống.
+ * @example
+ * POST /logout
+ * Body: { "refreshToken": "abcd1234-refresh-token" }
+ */
 exports.logout = async (req, res) => {
   try {
     // Lấy refreshToken từ request body
@@ -207,7 +247,17 @@ exports.logout = async (req, res) => {
   }
 };
 
-// API quên mật khẩu với chế độ phát triển (dev mode)
+/**
+ * API xử lý yêu cầu khôi phục mật khẩu bằng cách gửi email chứa token đặt lại.
+ * @async
+ * @param {Object} req - Đối tượng request từ client chứa email cần khôi phục mật khẩu.
+ * @param {Object} res - Đối tượng response để gửi phản hồi.
+ * @returns {Promise<void>} - Trả về thông báo đã gửi email khôi phục (nếu email hợp lệ).
+ * @throws {Error} - Trả về lỗi nếu xảy ra lỗi trong quá trình xử lý.
+ * @example
+ * POST /forgot-password
+ * Body: { "email": "user@example.com" }
+ */
 exports.forgotPassword = async (req, res) => {
   try {
     // Lấy email từ request body
@@ -286,7 +336,17 @@ exports.forgotPassword = async (req, res) => {
   }
 };
 
-// API để lấy token reset password trong môi trường phát triển
+/**
+ * API lấy token đặt lại mật khẩu trong môi trường phát triển.
+ * Chỉ hoạt động khi NODE_ENV="development".
+ * @async
+ * @param {Object} req - Đối tượng request từ client chứa email trong query parameters.
+ * @param {Object} res - Đối tượng response để gửi phản hồi.
+ * @returns {Promise<void>} - Trả về token đặt lại mật khẩu và URL đặt lại.
+ * @throws {Error} - Trả về lỗi nếu email không hợp lệ hoặc không tìm thấy token.
+ * @example
+ * GET /dev/reset-token?email=user@example.com
+ */
 exports.getDevResetToken = async (req, res) => {
   // Kiểm tra nếu không phải môi trường phát triển thì trả về lỗi 404 (Not Found)
   if (!isDevelopment) {
@@ -348,7 +408,17 @@ exports.getDevResetToken = async (req, res) => {
   }
 };
 
-// API xử lý yêu cầu đặt lại mật khẩu (reset password)
+/**
+ * API xử lý đặt lại mật khẩu sử dụng token đã được gửi.
+ * @async
+ * @param {Object} req - Đối tượng request từ client chứa token và mật khẩu mới.
+ * @param {Object} res - Đối tượng response để gửi phản hồi.
+ * @returns {Promise<void>} - Trả về thông báo thành công nếu mật khẩu được cập nhật.
+ * @throws {Error} - Trả về lỗi nếu token không hợp lệ, hết hạn hoặc xảy ra lỗi hệ thống.
+ * @example
+ * POST /reset-password
+ * Body: { "token": "reset-token-string", "newPassword": "new-password123" }
+ */
 exports.resetPassword = async (req, res) => {
   try {
     // Lấy token reset và mật khẩu mới từ request body
@@ -401,7 +471,18 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
-// API lấy thông tin người dùng hiện tại
+/**
+ * API lấy thông tin người dùng hiện tại dựa trên token xác thực.
+ * Yêu cầu JWT token hợp lệ trong header Authorization.
+ * @async
+ * @param {Object} req - Đối tượng request từ client chứa thông tin user (được gán từ middleware xác thực).
+ * @param {Object} res - Đối tượng response để gửi phản hồi.
+ * @returns {Promise<void>} - Trả về thông tin chi tiết của người dùng đang đăng nhập và gói đăng ký.
+ * @throws {Error} - Trả về lỗi nếu không tìm thấy người dùng hoặc xảy ra lỗi hệ thống.
+ * @example
+ * GET /me
+ * Headers: { "Authorization": "Bearer jwt-token-string" }
+ */
 exports.getCurrentUser = async (req, res) => {
   try {
       // Lấy ID của người dùng từ request (được gán từ middleware xác thực)
