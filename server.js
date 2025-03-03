@@ -2,6 +2,8 @@
 const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
+const workspaceRoutes = require('./routes/workspaceRoutes');
+const invitationRoutes = require('./routes/invitationRoutes');
 
 const app = express();
 require('dotenv').config();
@@ -12,6 +14,8 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/workspaces', workspaceRoutes);
+app.use('/api/invitations', invitationRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
