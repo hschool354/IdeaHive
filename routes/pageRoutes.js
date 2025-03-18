@@ -5,7 +5,7 @@ const authenticated = require('../middlewares/auth');
 // const validator = require('../middlewares/validator');
 const { body, param } = require('express-validator');
 
-cconsole.log('getWorkspacePages exists:', !!pageController.getWorkspacePages);
+console.log('getWorkspacePages exists:', !!pageController.getWorkspacePages);
 console.log('createPage exists:', !!pageController.createPage);
 
 // Lấy danh sách trang trong workspace

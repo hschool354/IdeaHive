@@ -3,7 +3,10 @@ const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
 const workspaceRoutes = require('./routes/workspaceRoutes');
 const invitationRoutes = require('./routes/invitationRoutes');
-//const pageRoutes = require('./routes/pageRoutes');
+const pageRoutes = require('./routes/pageRoutes');
+const pageContentRoutes = require('./routes/pageContentRoutes');
+const blockRoutes = require('./routes/blockRoutes');
+const commentRoutes = require('./routes/commentRoutes');
 
 const app = express();
 require('dotenv').config();
@@ -16,7 +19,26 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/invitations', invitationRoutes);
-//app.use('/api/page', pageRoutes); 
+app.use('/api', pageRoutes);
+app.use('/api', pageContentRoutes);
+app.use('/api', blockRoutes);
+app.use('/api', commentRoutes);
+
+const mongoose = require('mongoose');
+const config = require('./config/mongodb');
+
+async function testConnection() {
+    try {
+        await mongoose.connect(`${config.url}/${config.dbName}`);
+        console.log('Successfully connected to MongoDB.');
+        await mongoose.connection.close();
+        console.log('Connection closed.');
+    } catch (error) {
+        console.error('Error connecting to MongoDB:', error);
+    }
+}
+
+testConnection();
 
 // Basic route
 app.get('/', (req, res) => {
@@ -24,7 +46,7 @@ app.get('/', (req, res) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 5000; // Thay đổi từ 3000 sang 5000
+const PORT = process.env.PORT || 5000; 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

@@ -346,22 +346,21 @@ const updatePage = async (req, res) => {
  * DELETE /api/pages/:id
  */
 const deletePage = async (req, res) => {
-  const connection = await db.getConnection();
+  // Use the beginTransaction function from your db module instead
+  const transaction = await db.beginTransaction();
   
   try {
-    await connection.beginTransaction();
-    
     const { id: pageId } = req.params;
     const userId = req.user.id;
 
     // Lấy thông tin trang
-    const [pages] = await connection.query(
+    const pages = await transaction.execute(
       'SELECT * FROM pages WHERE id = ?',
       [pageId]
     );
 
     if (pages.length === 0) {
-      await connection.rollback();
+      await transaction.rollback();
       return res.status(404).json({ message: 'Trang không tồn tại' });
     }
 
@@ -369,7 +368,7 @@ const deletePage = async (req, res) => {
     const workspaceId = page.workspace_id;
 
     // Kiểm tra quyền xóa trang
-    const [memberCheck] = await connection.query(
+    const memberCheck = await transaction.execute(
       `SELECT wm.* FROM workspace_members wm
        JOIN roles r ON wm.role_id = r.id
        WHERE wm.workspace_id = ? AND wm.user_id = ? 
@@ -378,22 +377,22 @@ const deletePage = async (req, res) => {
     );
 
     if (memberCheck.length === 0) {
-      await connection.rollback();
+      await transaction.rollback();
       return res.status(403).json({ message: 'Không có quyền xóa trang này' });
     }
 
     // Lấy danh sách tất cả các trang con (bao gồm cả cháu, chắt,...)
-    const descendantPages = await getAllDescendantPages(pageId, connection);
+    const descendantPages = await getAllDescendantPages(pageId, transaction);
     const allPageIds = [pageId, ...descendantPages.map(p => p.id)];
 
     // Xóa các favorites liên quan đến các trang này
-    await connection.query(
+    await transaction.execute(
       'DELETE FROM favorites WHERE page_id IN (?)',
       [allPageIds]
     );
 
     // Cập nhật parent_page_id cho các trang con trực tiếp
-    await connection.query(
+    await transaction.execute(
       'UPDATE pages SET parent_page_id = ? WHERE parent_page_id = ?',
       [page.parent_page_id, pageId]
     );
@@ -403,22 +402,20 @@ const deletePage = async (req, res) => {
     // await deletePageContentsFromMongoDB(allPageIds);
 
     // Xóa trang từ MySQL
-    await connection.query(
+    await transaction.execute(
       'DELETE FROM pages WHERE id = ?',
       [pageId]
     );
 
-    await connection.commit();
+    await transaction.commit();
     
     res.status(200).json({
       message: 'Xóa trang thành công'
     });
   } catch (error) {
-    await connection.rollback();
+    await transaction.rollback();
     console.error('Lỗi khi xóa trang:', error);
     res.status(500).json({ message: 'Lỗi khi xóa trang' });
-  } finally {
-    connection.release();
   }
 };
 
@@ -433,22 +430,20 @@ const deletePage = async (req, res) => {
  * POST /api/pages/:id/duplicate
  */
 const duplicatePage = async (req, res) => {
-  const connection = await db.getConnection();
+  const transaction = await db.beginTransaction();
   
   try {
-    await connection.beginTransaction();
-
     const { id: pageId } = req.params;
     const userId = req.user.id;
 
     // Lấy thông tin trang gốc
-    const [pages] = await connection.query(
+    const pages = await transaction.execute(
       'SELECT * FROM pages WHERE id = ?',
       [pageId]
     );
 
     if (pages.length === 0) {
-      await connection.rollback();
+      await transaction.rollback();
       return res.status(404).json({ message: 'Trang không tồn tại' });
     }
 
@@ -456,7 +451,7 @@ const duplicatePage = async (req, res) => {
     const workspaceId = originalPage.workspace_id;
 
     // Kiểm tra quyền trong workspace
-    const [memberCheck] = await connection.query(
+    const memberCheck = await transaction.execute(
       `SELECT wm.* FROM workspace_members wm
        JOIN roles r ON wm.role_id = r.id
        WHERE wm.workspace_id = ? AND wm.user_id = ? 
@@ -465,7 +460,7 @@ const duplicatePage = async (req, res) => {
     );
 
     if (memberCheck.length === 0) {
-      await connection.rollback();
+      await transaction.rollback();
       return res.status(403).json({ message: 'Không có quyền nhân bản trang trong workspace này' });
     }
 
@@ -473,7 +468,7 @@ const duplicatePage = async (req, res) => {
     const newPageId = uuidv4();
 
     // Thêm trang mới vào cơ sở dữ liệu với dữ liệu từ trang gốc
-    await connection.query(
+    await transaction.execute(
       `INSERT INTO pages 
        (id, workspace_id, title, icon, cover_url, parent_page_id, is_public, created_by) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -490,7 +485,7 @@ const duplicatePage = async (req, res) => {
     );
 
     // Lấy danh sách các trang con của trang gốc
-    const [childPages] = await connection.query(
+    const childPages = await transaction.execute(
       'SELECT * FROM pages WHERE parent_page_id = ?',
       [pageId]
     );
@@ -500,10 +495,9 @@ const duplicatePage = async (req, res) => {
     pageIdMap.set(pageId, newPageId);
 
     // Nhân bản đệ quy các trang con
-    await duplicateChildPages(childPages, newPageId, userId, pageIdMap, connection);
+    await duplicateChildPages(childPages, newPageId, userId, pageIdMap, transaction);
 
-    
-    await connection.commit();
+    await transaction.commit();
 
     // Lấy thông tin trang mới đã tạo
     const [newPage] = await db.query(
@@ -519,11 +513,9 @@ const duplicatePage = async (req, res) => {
       page: newPage[0]
     });
   } catch (error) {
-    await connection.rollback();
+    await transaction.rollback();
     console.error('Lỗi khi nhân bản trang:', error);
     res.status(500).json({ message: 'Lỗi khi nhân bản trang' });
-  } finally {
-    connection.release();
   }
 };
 
@@ -574,31 +566,30 @@ async function checkIfDescendant(pageA, pageB, dbConnection) {
  * @param {Object} connection - Kết nối database.
  * @returns {Promise<Array>} - Trả về mảng các trang con cháu.
  */
-async function getAllDescendantPages(pageId, connection) {
-  const descendants = [];
-  const queue = [pageId];
-  const visited = new Set();
+const getAllDescendantPages = async (pageId, transaction) => {
+  let allDescendants = [];
+  let pagesToProcess = [pageId];
 
-  while (queue.length > 0) {
-    const currentId = queue.shift();
+  while (pagesToProcess.length > 0) {
+    const currentPageId = pagesToProcess.pop();
     
-    if (visited.has(currentId)) continue;
-    visited.add(currentId);
-
-    // Lấy tất cả các trang con trực tiếp
-    const [childPages] = await connection.query(
+    // Get direct children of the current page
+    const childPages = await transaction.execute(
       'SELECT * FROM pages WHERE parent_page_id = ?',
-      [currentId]
+      [currentPageId]
     );
-
-    for (const child of childPages) {
-      descendants.push(child);
-      queue.push(child.id);
+    
+    if (childPages.length > 0) {
+      // Add these pages to our results
+      allDescendants = [...allDescendants, ...childPages];
+      
+      // Add their IDs to the list of pages we need to process
+      pagesToProcess = [...pagesToProcess, ...childPages.map(page => page.id)];
     }
   }
 
-  return descendants;
-}
+  return allDescendants;
+};
 
 /**
  * Hàm nhân bản đệ quy các trang con.
@@ -607,16 +598,16 @@ async function getAllDescendantPages(pageId, connection) {
  * @param {string} newParentId - ID của trang cha mới.
  * @param {string} userId - ID của người dùng thực hiện nhân bản.
  * @param {Map} pageIdMap - Map ánh xạ giữa ID trang cũ và ID trang mới.
- * @param {Object} connection - Kết nối database.
+ * @param {Object} transaction - Đối tượng transaction.
  * @returns {Promise<void>}
  */
-async function duplicateChildPages(childPages, newParentId, userId, pageIdMap, connection) {
+async function duplicateChildPages(childPages, newParentId, userId, pageIdMap, transaction) {
   for (const childPage of childPages) {
     const newChildId = uuidv4();
     pageIdMap.set(childPage.id, newChildId);
 
     // Tạo bản sao của trang con
-    await connection.query(
+    await transaction.execute(
       `INSERT INTO pages 
        (id, workspace_id, title, icon, cover_url, parent_page_id, is_public, created_by) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -633,14 +624,14 @@ async function duplicateChildPages(childPages, newParentId, userId, pageIdMap, c
     );
 
     // Lấy các trang con của trang con hiện tại
-    const [grandChildPages] = await connection.query(
+    const grandChildPages = await transaction.execute(
       'SELECT * FROM pages WHERE parent_page_id = ?',
       [childPage.id]
     );
 
     // Đệ quy nhân bản các trang cháu
     if (grandChildPages.length > 0) {
-      await duplicateChildPages(grandChildPages, newChildId, userId, pageIdMap, connection);
+      await duplicateChildPages(grandChildPages, newChildId, userId, pageIdMap, transaction);
     }
   }
 }
