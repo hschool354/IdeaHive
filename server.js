@@ -7,6 +7,10 @@ const pageRoutes = require('./routes/pageRoutes');
 const pageContentRoutes = require('./routes/pageContentRoutes');
 const blockRoutes = require('./routes/blockRoutes');
 const commentRoutes = require('./routes/commentRoutes');
+const templateRoutes = require('./routes/templatesRoute');
+const attachmentRoutes = require('./routes/attachmentsRoute');
+const searchRoutes = require('./routes/searchRoute');
+const favoritesRoutes = require('./routes/favoritesRoute');
 
 const app = express();
 require('dotenv').config();
@@ -17,12 +21,17 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+// Template routes
+app.use('/api/templates', templateRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/invitations', invitationRoutes);
 app.use('/api', pageRoutes);
 app.use('/api', pageContentRoutes);
 app.use('/api', blockRoutes);
 app.use('/api', commentRoutes);
+app.use('/api/attachments', attachmentRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/favorites', favoritesRoutes);
 
 const mongoose = require('mongoose');
 const config = require('./config/mongodb');
