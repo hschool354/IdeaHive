@@ -17,42 +17,51 @@ const getPageContent = async (req, res) => {
   let client;
   try {
     const { id: pageId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    console.log('Fetching page content for pageId:', pageId, 'userId:', userId);
 
     // Kiểm tra sự tồn tại của trang và quyền truy cập
+    console.log('Querying pages table...');
     const [pages] = await db.query(
       'SELECT p.*, w.id as workspace_id FROM pages p JOIN workspaces w ON p.workspace_id = w.id WHERE p.id = ?',
       [pageId]
     );
+    console.log('Pages result:', pages);
 
     if (pages.length === 0) {
+      console.log('Page not found:', pageId);
       return res.status(404).json({ message: 'Trang không tồn tại' });
     }
 
     const page = pages[0];
     const workspaceId = page.workspace_id;
+    console.log('Page found:', page);
 
-    // Kiểm tra quyền truy cập trang (nếu không phải public)
     if (!page.is_public) {
+      console.log('Checking workspace membership...');
       const [memberCheck] = await db.query(
         'SELECT * FROM workspace_members WHERE workspace_id = ? AND user_id = ?',
         [workspaceId, userId]
       );
+      console.log('Member check result:', memberCheck);
 
       if (memberCheck.length === 0) {
+        console.log('No access for user:', userId, 'to workspace:', workspaceId);
         return res.status(403).json({ message: 'Không có quyền truy cập trang này' });
       }
     }
 
-    // Kết nối MongoDB
+    console.log('Connecting to MongoDB...');
     client = await MongoClient.connect(mongoConfig.url);
     const mongoDB = client.db(mongoConfig.dbName);
-    
-    // Lấy nội dung trang từ collection page_contents
+    console.log('MongoDB connected');
+
+    console.log('Fetching page content from MongoDB...');
     const pageContent = await mongoDB.collection('page_contents').findOne({ pageId });
+    console.log('Page content:', pageContent);
 
     if (!pageContent) {
-      // Nếu chưa có nội dung, trả về một nội dung mặc định
+      console.log('No page content found, returning default');
       return res.status(200).json({
         pageId,
         blocks: [],
@@ -60,26 +69,61 @@ const getPageContent = async (req, res) => {
       });
     }
 
-    // Lấy thông tin chi tiết của từng block
     let blocks = [];
     if (pageContent.blocks && pageContent.blocks.length > 0) {
-      const blockIds = pageContent.blocks.map(id => new ObjectId(id));
-      blocks = await mongoDB.collection('blocks')
-        .find({ _id: { $in: blockIds } })
-        .sort({ position: 1 })
-        .toArray();
+      console.log('Processing blocks:', pageContent.blocks);
+      const validBlockIds = pageContent.blocks
+        .map(block => {
+          // Nếu là chuỗi, thử chuyển thành ObjectId
+          if (typeof block === 'string') {
+            try {
+              return new ObjectId(block);
+            } catch (e) {
+              console.error('Invalid block ID string:', block, e);
+              return null;
+            }
+          }
+          // Nếu là đối tượng, lấy _id
+          else if (block && typeof block === 'object' && block._id) {
+            try {
+              return new ObjectId(block._id);
+            } catch (e) {
+              console.error('Invalid block._id:', block._id, e);
+              return null;
+            }
+          } else {
+            console.error('Unexpected block format:', block);
+            return null;
+          }
+        })
+        .filter(id => id !== null); // Loại bỏ các ID không hợp lệ
+      console.log('Valid block IDs:', validBlockIds);
+
+      if (validBlockIds.length > 0) {
+        blocks = await mongoDB.collection('blocks')
+          .find({ _id: { $in: validBlockIds } })
+          .sort({ position: 1 })
+          .toArray();
+        console.log('Blocks fetched:', blocks);
+      } else {
+        console.log('No valid block IDs found');
+      }
     }
 
+    console.log('Sending response...');
     res.status(200).json({
       pageId,
       blocks,
       version: pageContent.version
     });
   } catch (error) {
-    console.error('Lỗi khi lấy nội dung trang:', error);
-    res.status(500).json({ message: 'Lỗi khi lấy nội dung trang' });
+    console.error('Error in getPageContent:', error.stack);
+    res.status(500).json({ message: 'Lỗi khi lấy nội dung trang', error: error.message });
   } finally {
-    if (client) await client.close();
+    if (client) {
+      console.log('Closing MongoDB connection');
+      await client.close();
+    }
   }
 };
 

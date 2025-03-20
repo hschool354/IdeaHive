@@ -19,26 +19,38 @@ const createBlock = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const userId = req.user.id;
-    const { pageId, type, content, position, properties } = req.body;
+    const userId = req.user?.id;
+    console.log('Creating block for userId:', userId, 'with body:', req.body);
 
-    // Kiểm tra sự tồn tại của trang và quyền chỉnh sửa
+    if (!userId) {
+      console.log('User not authenticated');
+      return res.status(401).json({ message: 'Chưa đăng nhập' });
+    }
+
+    const { pageId, type, content, position, properties } = req.body;
+    console.log('Request data:', { pageId, type, content, position, properties });
+
+    console.log('Querying pages...');
     const [pages] = await db.query(
       'SELECT p.*, w.id as workspace_id FROM pages p JOIN workspaces w ON p.workspace_id = w.id WHERE p.id = ?',
       [pageId]
     );
+    console.log('Pages result:', pages);
 
     if (pages.length === 0) {
+      console.log('Page not found:', pageId);
       return res.status(404).json({ message: 'Trang không tồn tại' });
     }
 
     const page = pages[0];
     const workspaceId = page.workspace_id;
+    console.log('Page found:', page);
 
-    // Kiểm tra quyền chỉnh sửa trang
+    console.log('Checking workspace membership...');
     const [memberCheck] = await db.query(
       `SELECT wm.* FROM workspace_members wm
        JOIN roles r ON wm.role_id = r.id
@@ -46,19 +58,22 @@ const createBlock = async (req, res) => {
        AND r.name IN ('OWNER', 'ADMIN', 'MEMBER')`,
       [workspaceId, userId]
     );
+    console.log('Member check result:', memberCheck);
 
     if (memberCheck.length === 0) {
+      console.log('No edit permission for user:', userId, 'in workspace:', workspaceId);
       return res.status(403).json({ message: 'Không có quyền chỉnh sửa trang này' });
     }
 
-    // Kết nối MongoDB
+    console.log('Connecting to MongoDB...');
     client = await MongoClient.connect(mongoConfig.url);
     const mongoDB = client.db(mongoConfig.dbName);
-    
-    // Lấy thông tin nội dung trang hiện tại
+    console.log('MongoDB connected');
+
+    console.log('Fetching page content...');
     const pageContent = await mongoDB.collection('page_contents').findOne({ pageId });
-    
-    // Tạo block mới
+    console.log('Page content:', pageContent);
+
     const now = new Date();
     const newBlock = {
       pageId,
@@ -71,23 +86,32 @@ const createBlock = async (req, res) => {
       createdAt: now,
       updatedAt: now
     };
-    
+    console.log('New block:', newBlock);
+
+    console.log('Inserting new block...');
     const result = await mongoDB.collection('blocks').insertOne(newBlock);
     const blockId = result.insertedId;
-    
-    // Cập nhật page_contents
+    console.log('Block inserted with ID:', blockId);
+
     if (pageContent) {
-      // Nếu vị trí được chỉ định, cần điều chỉnh vị trí các block khác
       if (position !== undefined) {
-        // Lấy danh sách block hiện tại
+        console.log('Adjusting block positions...');
         const currentBlocks = await mongoDB.collection('blocks')
-          .find({ pageId, _id: { $in: pageContent.blocks.map(id => new ObjectId(id)) } })
+          .find({ pageId, _id: { $in: pageContent.blocks.map(id => {
+            try {
+              return new ObjectId(id);
+            } catch (e) {
+              console.error('Invalid block ID in pageContent.blocks:', id, e);
+              return null;
+            }
+          }).filter(id => id !== null) } })
           .sort({ position: 1 })
           .toArray();
-        
-        // Cập nhật vị trí của các block bị ảnh hưởng
+        console.log('Current blocks:', currentBlocks);
+
         for (const block of currentBlocks) {
           if (block.position >= position) {
+            console.log('Updating position for block:', block._id);
             await mongoDB.collection('blocks').updateOne(
               { _id: block._id },
               { $set: { position: block.position + 1, updatedAt: now } }
@@ -95,11 +119,11 @@ const createBlock = async (req, res) => {
           }
         }
       }
-      
-      // Chèn block mới vào danh sách
+
       const updatedBlocks = [...pageContent.blocks];
       updatedBlocks.splice(position !== undefined ? position : updatedBlocks.length, 0, blockId);
-      
+      console.log('Updating page_content with blocks:', updatedBlocks);
+
       await mongoDB.collection('page_contents').updateOne(
         { pageId },
         { 
@@ -112,7 +136,7 @@ const createBlock = async (req, res) => {
         }
       );
     } else {
-      // Nếu chưa có page_content, tạo mới
+      console.log('Creating new page_content...');
       await mongoDB.collection('page_contents').insertOne({
         pageId,
         blocks: [blockId],
@@ -121,22 +145,26 @@ const createBlock = async (req, res) => {
         lastEditedAt: now
       });
     }
-    
-    // Lấy thông tin block đã tạo
+
+    console.log('Fetching created block...');
     const createdBlock = await mongoDB.collection('blocks').findOne({ _id: blockId });
-    
-    // Cập nhật thời gian sửa đổi trang trong bảng SQL
+
+    console.log('Updating page updated_at...');
     await db.query(
       'UPDATE pages SET updated_at = NOW() WHERE id = ?',
       [pageId]
     );
-    
+
+    console.log('Sending response...');
     res.status(201).json(createdBlock);
   } catch (error) {
-    console.error('Lỗi khi tạo block:', error);
-    res.status(500).json({ message: 'Lỗi khi tạo block' });
+    console.error('Error in createBlock:', error.stack);
+    res.status(500).json({ message: 'Lỗi khi tạo block', error: error.message });
   } finally {
-    if (client) await client.close();
+    if (client) {
+      console.log('Closing MongoDB connection');
+      await client.close();
+    }
   }
 };
 
@@ -322,37 +350,50 @@ const deleteBlock = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
     const { id } = req.params;
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    console.log('Deleting block with ID:', id, 'by user:', userId);
 
-    // Kết nối MongoDB
+    if (!userId) {
+      console.log('User not authenticated');
+      return res.status(401).json({ message: 'Chưa đăng nhập' });
+    }
+
+    console.log('Connecting to MongoDB...');
     client = await MongoClient.connect(mongoConfig.url);
     const mongoDB = client.db(mongoConfig.dbName);
-    
-    // Lấy thông tin block
+    console.log('MongoDB connected');
+
+    console.log('Fetching block...');
     const block = await mongoDB.collection('blocks').findOne({ _id: new ObjectId(id) });
-    
+    console.log('Block found:', block);
+
     if (!block) {
+      console.log('Block not found with ID:', id);
       return res.status(404).json({ message: 'Block không tồn tại' });
     }
-    
-    // Kiểm tra quyền chỉnh sửa trang
+
+    console.log('Querying pages...');
     const [pages] = await db.query(
       'SELECT p.*, w.id as workspace_id FROM pages p JOIN workspaces w ON p.workspace_id = w.id WHERE p.id = ?',
       [block.pageId]
     );
+    console.log('Pages result:', pages);
 
     if (pages.length === 0) {
+      console.log('Page not found:', block.pageId);
       return res.status(404).json({ message: 'Trang không tồn tại' });
     }
 
     const page = pages[0];
     const workspaceId = page.workspace_id;
+    console.log('Page found:', page);
 
-    // Kiểm tra quyền chỉnh sửa trang
+    console.log('Checking workspace membership...');
     const [memberCheck] = await db.query(
       `SELECT wm.* FROM workspace_members wm
        JOIN roles r ON wm.role_id = r.id
@@ -360,19 +401,23 @@ const deleteBlock = async (req, res) => {
        AND r.name IN ('OWNER', 'ADMIN', 'MEMBER')`,
       [workspaceId, userId]
     );
+    console.log('Member check result:', memberCheck);
 
     if (memberCheck.length === 0) {
+      console.log('No edit permission for user:', userId, 'in workspace:', workspaceId);
       return res.status(403).json({ message: 'Không có quyền chỉnh sửa trang này' });
     }
-    
-    // Cập nhật page_contents (xóa block khỏi danh sách)
+
+    console.log('Fetching page content...');
     const pageContent = await mongoDB.collection('page_contents').findOne({ pageId: block.pageId });
-    
+    console.log('Page content:', pageContent);
+
     if (pageContent) {
       const updatedBlocks = pageContent.blocks.filter(
         blockId => blockId.toString() !== id
       );
-      
+      console.log('Updated blocks after removal:', updatedBlocks);
+
       await mongoDB.collection('page_contents').updateOne(
         { pageId: block.pageId },
         { 
@@ -384,13 +429,14 @@ const deleteBlock = async (req, res) => {
           }
         }
       );
-      
-      // Cập nhật vị trí của các block phía sau
+
+      console.log('Adjusting block positions...');
       const blocksToUpdate = await mongoDB.collection('blocks').find({
         pageId: block.pageId,
         position: { $gt: block.position }
       }).toArray();
-      
+      console.log('Blocks to update:', blocksToUpdate);
+
       for (const blockToUpdate of blocksToUpdate) {
         await mongoDB.collection('blocks').updateOne(
           { _id: blockToUpdate._id },
@@ -398,22 +444,26 @@ const deleteBlock = async (req, res) => {
         );
       }
     }
-    
-    // Xóa block
+
+    console.log('Deleting block...');
     await mongoDB.collection('blocks').deleteOne({ _id: new ObjectId(id) });
-    
-    // Cập nhật thời gian sửa đổi trang trong bảng SQL
+
+    console.log('Updating page updated_at...');
     await db.query(
       'UPDATE pages SET updated_at = NOW() WHERE id = ?',
       [block.pageId]
     );
-    
+
+    console.log('Sending response...');
     res.status(200).json({ message: 'Xóa block thành công' });
   } catch (error) {
-    console.error('Lỗi khi xóa block:', error);
-    res.status(500).json({ message: 'Lỗi khi xóa block' });
+    console.error('Error in deleteBlock:', error.stack);
+    res.status(500).json({ message: 'Lỗi khi xóa block', error: error.message });
   } finally {
-    if (client) await client.close();
+    if (client) {
+      console.log('Closing MongoDB connection');
+      await client.close();
+    }
   }
 };
 
