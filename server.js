@@ -1,8 +1,10 @@
+// server.js
 const express = require('express');
 const cors = require('cors');
-const http = require('http'); // Thêm http để tạo server
-const { Server } = require('socket.io'); // Thêm socket.io
+const http = require('http');
+const { Server } = require('socket.io');
 const authRoutes = require('./routes/authRoutes');
+const userProfile = require('./routes/userProfileRoute');
 const workspaceRoutes = require('./routes/workspaceRoutes');
 const invitationRoutes = require('./routes/invitationRoutes');
 const pageRoutes = require('./routes/pageRoutes');
@@ -17,13 +19,10 @@ const favoritesRoutes = require('./routes/favoritesRoute');
 const app = express();
 require('dotenv').config();
 
-// Tạo HTTP server từ Express app
 const server = http.createServer(app);
-
-// Khởi tạo socket.io
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000", // URL của React app
+    origin: "http://localhost:3000",
     methods: ["GET", "POST"],
   },
 });
@@ -32,8 +31,10 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
+
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/usersProfile', userProfile);
 app.use('/api/templates', templateRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/invitations', invitationRoutes);
@@ -51,22 +52,40 @@ io.on('connection', (socket) => {
 
   // Khi client tham gia một trang cụ thể
   socket.on('joinPage', (pageId) => {
-    socket.join(pageId); // Tham gia room dựa trên pageId
+    socket.join(pageId);
     console.log(`User ${socket.id} joined page ${pageId}`);
   });
 
-  // Lắng nghe sự kiện thay đổi blocks từ client
-  socket.on('blockUpdate', ({ pageId, blocks }) => {
-    console.log(`Received block update for page ${pageId}:`, blocks);
-    // Gửi thay đổi đến tất cả client trong cùng pageId (room)
-    io.to(pageId).emit('blockUpdate', blocks);
+  // Lắng nghe sự kiện cập nhật block từ client
+  socket.on('blockUpdate', ({ pageId, blockId, content }) => {
+    console.log(`Received block update for page ${pageId}, block ${blockId}: ${content}`);
+    // Gửi cập nhật đến tất cả client trong cùng pageId, trừ người gửi
+    socket.to(pageId).emit('blockUpdate', { blockId, content });
   });
+
+  // Lắng nghe sự kiện thêm block mới
+  socket.on('addBlock', ({ pageId, block }) => {
+    console.log(`New block added to page ${pageId}:`, block);
+    io.to(pageId).emit('blockAdded', block); // Gửi đến tất cả client trong page
+  });
+
+  // Lắng nghe sự kiện xóa block
+  socket.on('deleteBlock', ({ pageId, blockId }) => {
+    console.log(`Block ${blockId} deleted from page ${pageId}`);
+    io.to(pageId).emit('blockDeleted', blockId); // Gửi đến tất cả client trong page
+  });
+
+  // socket.on('pageSaved', ({ pageId, pageData, blocks }) => {
+  //   console.log(`Broadcasting pageSaved for page ${pageId}`);
+  //   socket.to(pageId).emit('pageSaved', { pageId, pageData, blocks }); // Chỉ gửi đến các client khác trong room
+  // });
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
   });
 });
 
+// MongoDB connection và các phần khác giữ nguyên
 const mongoose = require('mongoose');
 const config = require('./config/mongodb');
 
@@ -83,23 +102,18 @@ async function testConnection() {
 
 testConnection();
 
-// Basic route
 app.get('/', (req, res) => {
   res.send('ideaHive API is running');
 });
 
-// Start server
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => { // Dùng server.listen thay vì app.listen
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
 if (process.env.NODE_ENV === 'production') {
   const path = require('path');
-  // Serve static files
   app.use(express.static(path.join(__dirname, '../client/build')));
-  
-  // Handle React routing, return all requests to React app
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
   });

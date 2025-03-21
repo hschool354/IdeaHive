@@ -4,8 +4,22 @@ const templateController = require('../controllers/templateController');
 const authMiddleware = require('../middlewares/auth');
 
 /**
+ * @route   GET /api/templates/my-templates
+ * @desc    Lấy danh sách templates của người dùng hiện tại
+ * @access  Private
+ */
+router.get('/my-templates', authMiddleware, templateController.getMyTemplates);
+
+/**
+ * @route   GET /api/templates/public-templates
+ * @desc    Lấy danh sách tất cả templates công khai
+ * @access  Private
+ */
+router.get('/public-templates', authMiddleware, templateController.getPublicTemplates);
+
+/**
  * @route   GET /api/templates
- * @desc    Lấy danh sách templates
+ * @desc    Lấy danh sách templates (kết hợp cả của người dùng và công khai - tùy chọn)
  * @access  Private
  */
 router.get('/', authMiddleware, templateController.getTemplates);

@@ -5,14 +5,140 @@ const mongoConfig = require('../config/mongodb');
 const { mongo } = require('mongoose');
 
 /**
- * API lấy danh sách templates.
+ * API lấy danh sách templates của người dùng hiện tại.
+ * @async
+ * @param {Object} req - Đối tượng request từ client.
+ * @param {Object} res - Đối tượng response để gửi phản hồi.
+ * @returns {Promise<void>} - Trả về danh sách templates của người dùng.
+ * @throws {Error} - Trả về lỗi nếu không thể lấy danh sách templates.
+ * @example
+ * GET /api/templates/my-templates?workspaceId=xxx&category=yyy
+ */
+const getMyTemplates = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { workspaceId, category } = req.query;
+
+    let query = `
+      SELECT t.*, u.full_name as created_by_name
+      FROM templates t
+      JOIN users u ON t.created_by = u.id
+      WHERE t.created_by = ?
+    `;
+    const queryParams = [userId];
+
+    // Nếu có filter theo workspace
+    if (workspaceId) {
+      query += " AND t.workspace_id = ?";
+      queryParams.push(workspaceId);
+
+      // Kiểm tra quyền truy cập workspace
+      const [memberCheck] = await db.query(
+        'SELECT * FROM workspace_members WHERE workspace_id = ? AND user_id = ?',
+        [workspaceId, userId]
+      );
+      if (memberCheck.length === 0) {
+        return res.status(403).json({ message: 'Không có quyền truy cập templates của workspace này' });
+      }
+    }
+
+    // Nếu có filter theo category
+    if (category) {
+      query += " AND t.category = ?";
+      queryParams.push(category);
+    }
+
+    query += " ORDER BY t.created_at DESC";
+
+    // Thực hiện query
+    const [templates] = await db.query(query, queryParams);
+
+    // Kết nối đến MongoDB để lấy content
+    const client = await MongoClient.connect(mongoConfig.url);
+    const mongoDB = client.db(mongoConfig.dbName);
+    const templatesCollection = mongoDB.collection('templates');
+
+    const templatesWithContent = await Promise.all(templates.map(async (template) => {
+      const templateContent = await templatesCollection.findOne({ _id: template.id });
+      return {
+        ...template,
+        content: templateContent ? templateContent.content : []
+      };
+    }));
+
+    await client.close();
+
+    res.status(200).json(templatesWithContent);
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách templates của tôi:', error);
+    res.status(500).json({ message: 'Lỗi khi lấy danh sách templates của tôi' });
+  }
+};
+
+/**
+ * API lấy danh sách tất cả templates công khai.
+ * @async
+ * @param {Object} req - Đối tượng request từ client.
+ * @param {Object} res - Đối tượng response để gửi phản hồi.
+ * @returns {Promise<void>} - Trả về danh sách tất cả templates công khai.
+ * @throws {Error} - Trả về lỗi nếu không thể lấy danh sách templates.
+ * @example
+ * GET /api/templates/public-templates?category=xxx
+ */
+const getPublicTemplates = async (req, res) => {
+  try {
+    const { category } = req.query;
+
+    let query = `
+      SELECT t.*, u.full_name as created_by_name
+      FROM templates t
+      JOIN users u ON t.created_by = u.id
+      WHERE t.is_public = true
+    `;
+    const queryParams = [];
+
+    // Nếu có filter theo category
+    if (category) {
+      query += " AND t.category = ?";
+      queryParams.push(category);
+    }
+
+    query += " ORDER BY t.created_at DESC";
+
+    // Thực hiện query
+    const [templates] = await db.query(query, queryParams);
+
+    // Kết nối đến MongoDB để lấy content
+    const client = await MongoClient.connect(mongoConfig.url);
+    const mongoDB = client.db(mongoConfig.dbName);
+    const templatesCollection = mongoDB.collection('templates');
+
+    const templatesWithContent = await Promise.all(templates.map(async (template) => {
+      const templateContent = await templatesCollection.findOne({ _id: template.id });
+      return {
+        ...template,
+        content: templateContent ? templateContent.content : []
+      };
+    }));
+
+    await client.close();
+
+    res.status(200).json(templatesWithContent);
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách templates công khai:', error);
+    res.status(500).json({ message: 'Lỗi khi lấy danh sách templates công khai' });
+  }
+};
+
+/**
+ * API lấy danh sách templates (kết hợp cả của người dùng và công khai - tùy chọn).
  * @async
  * @param {Object} req - Đối tượng request từ client.
  * @param {Object} res - Đối tượng response để gửi phản hồi.
  * @returns {Promise<void>} - Trả về danh sách templates.
  * @throws {Error} - Trả về lỗi nếu không thể lấy danh sách templates.
  * @example
- * GET /api/templates
+ * GET /api/templates?workspaceId=xxx&category=yyy
  */
 const getTemplates = async (req, res) => {
   try {
@@ -25,47 +151,37 @@ const getTemplates = async (req, res) => {
       JOIN users u ON t.created_by = u.id
       WHERE (t.is_public = true OR t.created_by = ?)
     `;
-    
     const queryParams = [userId];
 
-    // Nếu có filter theo workspace
     if (workspaceId) {
       query += " AND (t.workspace_id = ? OR t.workspace_id IS NULL)";
       queryParams.push(workspaceId);
 
-      // Kiểm tra người dùng có quyền xem templates của workspace này không
       const [memberCheck] = await db.query(
         'SELECT * FROM workspace_members WHERE workspace_id = ? AND user_id = ?',
         [workspaceId, userId]
       );
-
       if (memberCheck.length === 0) {
         return res.status(403).json({ message: 'Không có quyền truy cập templates của workspace này' });
       }
     } else {
-      // Nếu không có filter theo workspace, chỉ lấy templates public hoặc của người dùng
       query += " AND (t.workspace_id IS NULL OR t.created_by = ?)";
       queryParams.push(userId);
     }
 
-    // Nếu có filter theo category
     if (category) {
       query += " AND t.category = ?";
       queryParams.push(category);
     }
 
-    // Thêm sắp xếp và phân trang
     query += " ORDER BY t.created_at DESC";
 
-    // Thực hiện query
     const [templates] = await db.query(query, queryParams);
 
-    // Kết nối đến MongoDB để lấy content của templates
     const client = await MongoClient.connect(mongoConfig.url);
     const mongoDB = client.db(mongoConfig.dbName);
     const templatesCollection = mongoDB.collection('templates');
 
-    // Lấy content cho từng template
     const templatesWithContent = await Promise.all(templates.map(async (template) => {
       const templateContent = await templatesCollection.findOne({ _id: template.id });
       return {
@@ -626,6 +742,8 @@ const applyTemplate = async (req, res) => {
 
 module.exports = {
   getTemplates,
+  getMyTemplates,
+  getPublicTemplates,
   createTemplate,
   getTemplateById,
   updateTemplate,

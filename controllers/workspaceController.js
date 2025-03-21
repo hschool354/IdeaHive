@@ -236,18 +236,19 @@ const getWorkspaceMembers = async (req, res, next) => {
     const { id } = req.params;
     const userId = req.user.id;
 
-    // Kiểm tra quyền truy cập
-    const memberCheckQuery = `
-      SELECT * FROM workspace_members
-      WHERE workspace_id = ? AND user_id = ?
+    // Kiểm tra quyền truy cập (chỉ OWNER hoặc ADMIN)
+    const adminCheckQuery = `
+      SELECT * FROM workspace_members wm
+      JOIN roles r ON wm.role_id = r.id
+      WHERE wm.workspace_id = ? AND wm.user_id = ? AND r.name IN ('OWNER', 'ADMIN','MEMBER')
     `;
+    const adminCheck = await executeQuery(adminCheckQuery, [id, userId]);
 
-    const memberCheck = await executeQuery(memberCheckQuery, [id, userId]);
-
-    if (memberCheck.length === 0) {
-      return next(
-        new ForbiddenError("Bạn không có quyền truy cập workspace này")
-      );
+    if (adminCheck.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Bạn không có quyền truy cập danh sách thành viên workspace này",
+      });
     }
 
     // Lấy danh sách thành viên
@@ -258,7 +259,6 @@ const getWorkspaceMembers = async (req, res, next) => {
       JOIN roles r ON wm.role_id = r.id
       WHERE wm.workspace_id = ?
     `;
-
     const members = await executeQuery(membersQuery, [id]);
 
     res.status(200).json({
@@ -268,7 +268,10 @@ const getWorkspaceMembers = async (req, res, next) => {
     });
   } catch (error) {
     logger.error("Error fetching workspace members:", error);
-    next(error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi server khi lấy danh sách thành viên",
+    });
   }
 };
 
