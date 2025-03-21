@@ -5,13 +5,13 @@ const authenticated = require('../middlewares/auth');
 const { body } = require('express-validator');
 
 // Lấy thông tin profile
-router.get('/users/profile', 
+router.get('/', 
   authenticated,
   userProfileController.getUserProfile
 );
 
 // Cập nhật profile
-router.put('/users/profile',
+router.put('/',
   authenticated,
   body('full_name').optional().notEmpty().withMessage('Tên không được để trống nếu được cung cấp'),
   body('email').optional().isEmail().withMessage('Email không hợp lệ'),
@@ -19,7 +19,7 @@ router.put('/users/profile',
 );
 
 // Cập nhật avatar
-router.put('/users/avatar',
+router.put('/',
   authenticated,
   userProfileController.updateUserAvatar
 );
