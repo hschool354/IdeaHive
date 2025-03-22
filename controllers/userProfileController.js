@@ -16,7 +16,7 @@ const getUserProfile = async (req, res) => {
     const userId = req.user.id;
 
     const [userProfile] = await db.query(
-      `SELECT id, email, full_name, avatar_url, created_at, updated_at
+      `SELECT id, email, full_name, avatar_binary, created_at, updated_at
        FROM users 
        WHERE id = ?`,
       [userId]
@@ -26,7 +26,14 @@ const getUserProfile = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy thông tin người dùng' });
     }
 
-    res.status(200).json(userProfile[0]);
+    const profile = userProfile[0];
+    if (profile.avatar_binary) {
+      // Chuyển dữ liệu nhị phân sang base64 để gửi về client
+      profile.avatar_base64 = profile.avatar_binary.toString('base64');
+      delete profile.avatar_binary; // Xóa trường binary gốc để giảm tải
+    }
+
+    res.status(200).json(profile);
   } catch (error) {
     console.error('Lỗi khi lấy thông tin profile:', error);
     res.status(500).json({ message: 'Lỗi khi lấy thông tin profile' });
@@ -90,7 +97,7 @@ const updateUserProfile = async (req, res) => {
 
     // Lấy thông tin đã cập nhật
     const [updatedProfile] = await db.query(
-      `SELECT id, email, full_name, avatar_url, created_at, updated_at
+      `SELECT id, email, full_name, avatar_binary, created_at, updated_at
        FROM users 
        WHERE id = ?`,
       [userId]
@@ -107,34 +114,34 @@ const updateUserProfile = async (req, res) => {
 };
 
 /**
- * API cập nhật avatar người dùng.
+ * API cập nhật avatar người dùng dưới dạng binary.
  * @async
  * @param {Object} req - Đối tượng request từ client.
  * @param {Object} res - Đối tượng response để gửi phản hồi.
- * @returns {Promise<void>} - Trả về đường dẫn avatar đã cập nhật.
+ * @returns {Promise<void>} - Trả về thông báo cập nhật thành công.
  * @throws {Error} - Trả về lỗi nếu không thể cập nhật avatar.
  * @example
  * PUT /api/users/avatar
- * Body: { "avatar_url": "https://example.com/avatar.jpg" }
+ * Form-data: { "avatar": <file> }
  */
 const updateUserAvatar = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { avatar_url } = req.body;
 
-    if (!avatar_url) {
-      return res.status(400).json({ message: 'URL avatar là bắt buộc' });
+    if (!req.file) {
+      return res.status(400).json({ message: 'Vui lòng upload file ảnh' });
     }
 
-    // Cập nhật URL avatar
+    const avatarBinary = req.file.buffer; // Dữ liệu nhị phân của ảnh
+
+    // Cập nhật dữ liệu nhị phân vào database
     await db.query(
-      'UPDATE users SET avatar_url = ? WHERE id = ?',
-      [avatar_url, userId]
+      'UPDATE users SET avatar_binary = ? WHERE id = ?',
+      [avatarBinary, userId]
     );
 
     res.status(200).json({
-      message: 'Cập nhật avatar thành công',
-      avatar_url
+      message: 'Cập nhật avatar thành công'
     });
   } catch (error) {
     console.error('Lỗi khi cập nhật avatar:', error);

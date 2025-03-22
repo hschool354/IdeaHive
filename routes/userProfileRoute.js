@@ -3,6 +3,12 @@ const router = express.Router();
 const userProfileController = require('../controllers/userProfileController');
 const authenticated = require('../middlewares/auth');
 const { body } = require('express-validator');
+const multer = require('multer');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 } 
+});
 
 // Lấy thông tin profile
 router.get('/', 
@@ -19,8 +25,9 @@ router.put('/',
 );
 
 // Cập nhật avatar
-router.put('/',
+router.put('/avatar',
   authenticated,
+  upload.single('avatar'), // 'avatar' là tên field trong form-data
   userProfileController.updateUserAvatar
 );
 

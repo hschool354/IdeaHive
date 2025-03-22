@@ -31,7 +31,6 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
-
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/usersProfile', userProfile);
@@ -57,10 +56,14 @@ io.on('connection', (socket) => {
   });
 
   // Lắng nghe sự kiện cập nhật block từ client
-  socket.on('blockUpdate', ({ pageId, blockId, content }) => {
-    console.log(`Received block update for page ${pageId}, block ${blockId}: ${content}`);
-    // Gửi cập nhật đến tất cả client trong cùng pageId, trừ người gửi
-    socket.to(pageId).emit('blockUpdate', { blockId, content });
+  socket.on('blockUpdate', (data) => {
+    console.log(`Received block update for page ${data.pageId}, block ${data.blockId}:`, data);
+    const payload = typeof data === 'string' ? { content: data } : data;
+    if (!payload.pageId || !payload.blockId) {
+      console.error('Invalid blockUpdate payload:', payload);
+      return;
+    }
+    socket.to(payload.pageId).emit('blockUpdate', payload);
   });
 
   // Lắng nghe sự kiện thêm block mới
@@ -74,11 +77,6 @@ io.on('connection', (socket) => {
     console.log(`Block ${blockId} deleted from page ${pageId}`);
     io.to(pageId).emit('blockDeleted', blockId); // Gửi đến tất cả client trong page
   });
-
-  // socket.on('pageSaved', ({ pageId, pageData, blocks }) => {
-  //   console.log(`Broadcasting pageSaved for page ${pageId}`);
-  //   socket.to(pageId).emit('pageSaved', { pageId, pageData, blocks }); // Chỉ gửi đến các client khác trong room
-  // });
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);

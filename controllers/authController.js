@@ -134,7 +134,7 @@ exports.login = async (req, res) => {
         id: user.id,
         email: user.email,
         fullName: user.full_name,
-        avatarUrl: user.avatar_url
+        avatarUrl: user.avatar_binary
       }
     });
   } catch (error) {
@@ -490,7 +490,7 @@ exports.getCurrentUser = async (req, res) => {
 
       // Truy vấn database để lấy thông tin người dùng dựa trên userId
       const [users] = await db.query(
-          'SELECT id, email, full_name, avatar_url, created_at FROM users WHERE id = ?', 
+          'SELECT id, email, full_name, avatar_binary, created_at FROM users WHERE id = ?', 
           [userId]
       );
 
@@ -514,7 +514,7 @@ exports.getCurrentUser = async (req, res) => {
           id: user.id,                  // ID người dùng
           email: user.email,            // Email người dùng
           fullName: user.full_name,     // Họ và tên đầy đủ
-          avatarUrl: user.avatar_url,   // Ảnh đại diện
+          avatarUrl: user.avatar_binary,   // Ảnh đại diện
           createdAt: user.created_at,   // Thời gian tạo tài khoản
           subscription: subscriptions.length > 0 ? { // Thông tin gói đăng ký (nếu có)
               planType: subscriptions[0].plan_type, // Loại gói đăng ký
