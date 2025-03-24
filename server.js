@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -15,6 +14,8 @@ const templateRoutes = require('./routes/templatesRoute');
 const attachmentRoutes = require('./routes/attachmentsRoute');
 const searchRoutes = require('./routes/searchRoute');
 const favoritesRoutes = require('./routes/favoritesRoute');
+const subscriptionsRoute = require('./routes/subscriptionsRoute');
+const { setupChatbotHandler } = require('./chatbotHandler');
 
 const app = express();
 require('dotenv').config();
@@ -44,6 +45,7 @@ app.use('/api', commentRoutes);
 app.use('/api/attachments', attachmentRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/favorites', favoritesRoutes);
+app.use('/api/subscriptions', subscriptionsRoute);
 
 // Xử lý WebSocket
 io.on('connection', (socket) => {
@@ -77,6 +79,9 @@ io.on('connection', (socket) => {
     console.log(`Block ${blockId} deleted from page ${pageId}`);
     io.to(pageId).emit('blockDeleted', blockId); // Gửi đến tất cả client trong page
   });
+
+  // Gọi hàm xử lý chatbot
+  setupChatbotHandler(io, socket);
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);

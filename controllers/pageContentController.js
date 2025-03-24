@@ -316,7 +316,7 @@ const getPageHistory = async (req, res) => {
     
     if (userIds.length > 0) {
       const [users] = await db.query(
-        'SELECT id, full_name, avatar_url FROM users WHERE id IN (?)',
+        'SELECT id, full_name, avatar_binary FROM users WHERE id IN (?)',
         [userIds]
       );
       
@@ -416,7 +416,7 @@ const getPageVersion = async (req, res) => {
 
     // Lấy thông tin người chỉnh sửa
     const [editor] = await db.query(
-      'SELECT full_name, avatar_url FROM users WHERE id = ?',
+      'SELECT full_name, avatar_binary FROM users WHERE id = ?',
       [historyEntry.editedBy]
     );
 

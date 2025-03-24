@@ -67,7 +67,7 @@ const getPageComments = async (req, res) => {
       const userIds = [...new Set(comments.map((comment) => comment.userId))];
 
       const [users] = await db.query(
-        "SELECT id, full_name, avatar_url FROM users WHERE id IN (?)",
+        "SELECT id, full_name, avatar_binary FROM users WHERE id IN (?)",
         [userIds]
       );
 
@@ -78,7 +78,7 @@ const getPageComments = async (req, res) => {
         if (userMap.has(comment.userId)) {
           comment.user = {
             full_name: userMap.get(comment.userId).full_name,
-            avatar_url: userMap.get(comment.userId).avatar_url,
+            avatar_binary: userMap.get(comment.userId).avatar_binary,
           };
         }
       });
@@ -164,14 +164,14 @@ const addPageComment = async (req, res) => {
 
     // Lấy thông tin người dùng từ MySQL
     const [userData] = await db.query(
-      "SELECT id, full_name, avatar_url FROM users WHERE id = ?",
+      "SELECT id, full_name, avatar_binary FROM users WHERE id = ?",
       [userId]
     );
 
     if (userData.length > 0) {
       newComment.user = {
         full_name: userData[0].full_name,
-        avatar_url: userData[0].avatar_url,
+        avatar_binary: userData[0].avatar_binary,
       };
     }
 
@@ -261,7 +261,7 @@ const getBlockComments = async (req, res) => {
       const userIds = [...new Set(comments.map((comment) => comment.userId))];
 
       const [users] = await db.query(
-        "SELECT id, full_name, avatar_url FROM users WHERE id IN (?)",
+        "SELECT id, full_name, avatar_binary FROM users WHERE id IN (?)",
         [userIds]
       );
 
@@ -272,7 +272,7 @@ const getBlockComments = async (req, res) => {
         if (userMap.has(comment.userId)) {
           comment.user = {
             full_name: userMap.get(comment.userId).full_name,
-            avatar_url: userMap.get(comment.userId).avatar_url,
+            avatar_binary: userMap.get(comment.userId).avatar_binary,
           };
         }
       });
@@ -370,14 +370,14 @@ const addBlockComment = async (req, res) => {
 
     // Lấy thông tin người dùng từ MySQL
     const [userData] = await db.query(
-      "SELECT id, full_name, avatar_url FROM users WHERE id = ?",
+      "SELECT id, full_name, avatar_binary FROM users WHERE id = ?",
       [userId]
     );
 
     if (userData.length > 0) {
       newComment.user = {
         full_name: userData[0].full_name,
-        avatar_url: userData[0].avatar_url,
+        avatar_binary: userData[0].avatar_binary,
       };
     }
 
@@ -453,14 +453,14 @@ const updateComment = async (req, res) => {
 
     // Lấy thông tin người dùng từ MySQL
     const [userData] = await db.query(
-      "SELECT id, full_name, avatar_url FROM users WHERE id = ?",
+      "SELECT id, full_name, avatar_binary FROM users WHERE id = ?",
       [userId]
     );
 
     if (userData.length > 0) {
       updatedComment.user = {
         full_name: userData[0].full_name,
-        avatar_url: userData[0].avatar_url,
+        avatar_binary: userData[0].avatar_binary,
       };
     }
 

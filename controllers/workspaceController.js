@@ -253,7 +253,7 @@ const getWorkspaceMembers = async (req, res, next) => {
 
     // Lấy danh sách thành viên
     const membersQuery = `
-      SELECT u.id, u.email, u.full_name, u.avatar_url, r.name as role
+      SELECT u.id, u.email, u.full_name, u.avatar_binary, r.name as role
       FROM workspace_members wm
       JOIN users u ON wm.user_id = u.id
       JOIN roles r ON wm.role_id = r.id
